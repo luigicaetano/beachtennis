@@ -9,32 +9,38 @@ service cloud.firestore {
     match /tournaments/{tournamentId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update, delete: if request.auth != null
-        && resource.data.createdBy == request.auth.uid;
+      // Só o criador ou admins podem atualizar (regras, config)
+      allow update: if request.auth != null && (
+        resource.data.createdBy == request.auth.uid ||
+        exists(/databases/$(database)/documents/tournaments/$(tournamentId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/tournaments/$(tournamentId)/members/$(request.auth.uid)).data.role == "admin"
+      );
+      allow delete: if request.auth != null && resource.data.createdBy == request.auth.uid;
 
-      // Membros: qualquer logado pode ler e se adicionar
+      // Membros
       match /members/{memberId} {
         allow read: if request.auth != null;
-        // Pode criar/atualizar seu próprio membro
+        // Qualquer logado pode se inscrever (criar seu próprio doc)
         allow create: if request.auth != null && memberId == request.auth.uid;
-        // Só admin (criador do torneio) pode atualizar outros (ex: marcar pago)
+        // Pode atualizar: o próprio membro, ou admins do torneio
         allow update: if request.auth != null && (
           memberId == request.auth.uid ||
-          get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.createdBy == request.auth.uid
+          get(/databases/$(database)/documents/tournaments/$(tournamentId)/members/$(request.auth.uid)).data.role == "admin"
         );
       }
 
-      // Partidas: qualquer membro inscrito pode registrar
+      // Partidas: qualquer membro inscrito pode registrar e ler
       match /matches/{matchId} {
         allow read: if request.auth != null;
-        allow create: if request.auth != null
-          && exists(/databases/$(database)/documents/tournaments/$(tournamentId)/members/$(request.auth.uid));
-        allow update, delete: if request.auth != null
-          && get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.createdBy == request.auth.uid;
+        allow create: if request.auth != null &&
+          exists(/databases/$(database)/documents/tournaments/$(tournamentId)/members/$(request.auth.uid));
+        // Só admins podem editar/deletar partidas
+        allow update, delete: if request.auth != null &&
+          get(/databases/$(database)/documents/tournaments/$(tournamentId)/members/$(request.auth.uid)).data.role == "admin";
       }
     }
 
-    // Enrollments pessoais de cada usuário
+    // Inscrições pessoais de cada usuário
     match /users/{userId}/enrollments/{enrollmentId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }

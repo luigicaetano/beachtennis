@@ -7,15 +7,39 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 
-// ── Regras de pontuação ──────────────────────────────────────────
-// Para pontuar no ranking, o jogador precisa:
-// ✅ Estar inscrito no torneio
-// ✅ Ter a taxa paga
-// ✅ Ter >= 3 vitórias no torneio
-// ✅ Ter jogado >= 5 partidas no torneio
+// ── Helpers de semana ─────────────────────────────────────────────
+function getMondayStr(dateStr) {
+  const d = new Date(dateStr + "T12:00:00");
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() + diff);
+  return mon.toISOString().split("T")[0];
+}
 
-const TABS = ["🏆 Ranking", "📅 Partidas", "💰 Financeiro", "➕ Nova Partida"];
+function getWeekKey(dateStr) {
+  return getMondayStr(dateStr);
+}
 
+function getWeekRange(mondayStr) {
+  const mon = new Date(mondayStr + "T12:00:00");
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const fmt = (dt) => dt.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return `${fmt(mon)} – ${fmt(sun)}`;
+}
+
+function todayStr() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function formatDate(s) {
+  if (!s) return "";
+  const [y, m, d] = s.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// ── CSS global ────────────────────────────────────────────────────
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,8 +47,7 @@ const css = `
   .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; }
   .badge-green { background: rgba(46,204,113,0.2); color: #2ecc71; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 600; }
   .badge-red { background: rgba(231,76,60,0.2); color: #e74c3c; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-  .badge-yellow { background: rgba(255,215,0,0.15); color: #ffd700; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-  .tab-btn { flex: 1; padding: 12px 2px; background: transparent; border: none; color: rgba(255,255,255,0.4); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; white-space: nowrap; }
+  .tab-btn { flex: 1; padding: 11px 2px; background: transparent; border: none; color: rgba(255,255,255,0.4); font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; white-space: nowrap; }
   .tab-btn.active { color: #2ecc71; border-bottom-color: #2ecc71; }
   .btn-green { background: #2ecc71; color: #0a2e1f; border: none; padding: 13px; border-radius: 12px; font-family: inherit; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; }
   .btn-green:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -32,33 +55,37 @@ const css = `
   .input-field::placeholder { color: rgba(255,255,255,0.3); }
   select.input-field option { background: #0a2e1f; }
   input[type="date"].input-field::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.5); }
+  input[type="number"].input-field { -moz-appearance: textfield; }
+  input[type="number"].input-field::-webkit-outer-spin-button,
+  input[type="number"].input-field::-webkit-inner-spin-button { -webkit-appearance: none; }
 `;
 
-function label(txt) {
-  return <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", display: "block", marginBottom: 6, letterSpacing: 0.5 }}>{txt}</label>;
+function Lbl({ children }) {
+  return (
+    <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", display: "block", marginBottom: 6, letterSpacing: 0.5 }}>
+      {children}
+    </label>
+  );
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return "";
-  const [y, m, d] = dateStr.split("-");
-  return `${d}/${m}/${y}`;
-}
+const DEFAULT_RULES = { minWins: 3, minGames: 5, weeklyFee: 10 };
+const TABS = ["🏆 Ranking", "📅 Partidas", "💰 Financeiro", "➕ Partida", "⚙️ Config"];
 
 export default function App({ tournament, onBack }) {
   const { user } = useAuth();
   const isAdmin = tournament.role === "admin";
+  const basePath = `tournaments/${tournament.id}`;
 
   const [tab, setTab] = useState(0);
   const [members, setMembers] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [rules, setRules] = useState(DEFAULT_RULES);
   const [saving, setSaving] = useState(false);
+  const [editRules, setEditRules] = useState(null);
 
-  const [newMatch, setNewMatch] = useState({
-    player1: "", player2: "", score1: "", score2: "",
-    date: new Date().toISOString().split("T")[0],
-  });
-
-  const basePath = `tournaments/${tournament.id}`;
+  const emptyMatch = { date: todayStr(), p1a: "", p1b: "", p2a: "", p2b: "", score1: "", score2: "" };
+  const [nm, setNm] = useState(emptyMatch);
+  const setF = (k) => (e) => setNm((m) => ({ ...m, [k]: e.target.value }));
 
   useEffect(() => {
     const u1 = onSnapshot(
@@ -69,38 +96,55 @@ export default function App({ tournament, onBack }) {
       query(collection(db, `${basePath}/matches`), orderBy("date", "asc")),
       (snap) => setMatches(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
-    return () => { u1(); u2(); };
+    const u3 = onSnapshot(doc(db, basePath), (snap) => {
+      if (snap.exists() && snap.data().rules) {
+        setRules({ ...DEFAULT_RULES, ...snap.data().rules });
+      }
+    });
+    return () => { u1(); u2(); u3(); };
   }, [basePath]);
 
-  // ── Stats per player ─────────────────────────────────────────────
-  const statsFor = (name) => {
-    const played = matches.filter((m) => m.player1 === name || m.player2 === name);
-    const wins = played.filter((m) =>
-      (m.player1 === name && m.score1 > m.score2) ||
-      (m.player2 === name && m.score2 > m.score1)
-    ).length;
-    return { played: played.length, wins };
+  // ── Stats por jogador ─────────────────────────────────────────────
+  const statsFor = (member) => {
+    const myMatches = matches.filter((m) =>
+      [m.p1a, m.p1b, m.p2a, m.p2b].includes(member.name)
+    );
+    const wins = myMatches.filter((m) => {
+      const inD1 = m.p1a === member.name || m.p1b === member.name;
+      return (inD1 && m.score1 > m.score2) || (!inD1 && m.score2 > m.score1);
+    }).length;
+
+    const weeksPlayed = [...new Set(myMatches.map((m) => getWeekKey(m.date || todayStr())))].sort();
+    const paidWeeks = member.paidWeeks || [];
+    const unpaidWeeks = weeksPlayed.filter((w) => !paidWeeks.includes(w));
+
+    return { played: myMatches.length, wins, weeksPlayed, paidWeeks, unpaidWeeks };
   };
 
-  // ── Ranking with qualification check ────────────────────────────
+  // ── Ranking ───────────────────────────────────────────────────────
   const ranking = members.map((m) => {
-    const { played, wins } = statsFor(m.name);
-    const qualified = m.paid && wins >= 3 && played >= 5;
-    return { ...m, played, wins, qualified };
+    const stats = statsFor(m);
+    const taxaOk = stats.weeksPlayed.length > 0 && stats.unpaidWeeks.length === 0;
+    const qualified = taxaOk && stats.wins >= rules.minWins && stats.played >= rules.minGames;
+    return { ...m, ...stats, taxaOk, qualified };
   }).sort((a, b) => {
-    // Qualified first, then by wins, then by games played
     if (a.qualified !== b.qualified) return a.qualified ? -1 : 1;
     if (b.wins !== a.wins) return b.wins - a.wins;
     return b.played - a.played;
   });
 
-  // ── Financial ───────────────────────────────────────────────────
-  const totalPago = members.filter((m) => m.paid).reduce((a, m) => a + (m.amount || 0), 0);
-  const totalPendente = members.filter((m) => !m.paid).reduce((a, m) => a + (m.amount || 0), 0);
+  // ── Financeiro ────────────────────────────────────────────────────
+  const totalPago = members.reduce((acc, m) => {
+    return acc + ((m.paidWeeks || []).length * rules.weeklyFee);
+  }, 0);
+  const totalPendente = members.reduce((acc, m) => {
+    const stats = statsFor(m);
+    return acc + stats.unpaidWeeks.length * rules.weeklyFee;
+  }, 0);
 
-  // ── Matches grouped by date ──────────────────────────────────────
+  // ── Partidas por data ─────────────────────────────────────────────
   const matchesByDate = matches.reduce((acc, m) => {
-    const key = m.date || "sem data";
+    const key = m.date || "sem-data";
     if (!acc[key]) acc[key] = [];
     acc[key].push(m);
     return acc;
@@ -108,25 +152,44 @@ export default function App({ tournament, onBack }) {
 
   const memberNames = members.map((m) => m.name);
 
+  // ── Ações ─────────────────────────────────────────────────────────
   const handleAddMatch = async () => {
-    const { player1, player2, score1, score2, date } = newMatch;
-    if (!player1 || !player2 || score1 === "" || score2 === "" || !date) return;
+    const { date, p1a, p1b, p2a, p2b, score1, score2 } = nm;
+    if (!date || !p1a || !p2a || score1 === "" || score2 === "") return;
     setSaving(true);
     await addDoc(collection(db, `${basePath}/matches`), {
-      player1, player2,
-      score1: Number(score1), score2: Number(score2),
       date,
+      p1a, p1b: p1b || null,
+      p2a, p2b: p2b || null,
+      score1: Number(score1), score2: Number(score2),
+      weekKey: getWeekKey(date),
       registeredBy: user.uid,
       createdAt: serverTimestamp(),
     });
-    setNewMatch({ player1: "", player2: "", score1: "", score2: "", date: new Date().toISOString().split("T")[0] });
+    setNm(emptyMatch);
     setSaving(false);
     setTab(1);
   };
 
-  const handleTogglePaid = async (member) => {
+  const handleToggleWeekPaid = async (member, weekKey) => {
     if (!isAdmin) return;
-    await updateDoc(doc(db, `${basePath}/members/${member.id}`), { paid: !member.paid });
+    const current = member.paidWeeks || [];
+    const updated = current.includes(weekKey)
+      ? current.filter((w) => w !== weekKey)
+      : [...current, weekKey];
+    await updateDoc(doc(db, `${basePath}/members/${member.id}`), { paidWeeks: updated });
+  };
+
+  const handleToggleAdmin = async (member) => {
+    if (!isAdmin) return;
+    const newRole = member.role === "admin" ? "player" : "admin";
+    await updateDoc(doc(db, `${basePath}/members/${member.id}`), { role: newRole });
+  };
+
+  const handleSaveRules = async () => {
+    await updateDoc(doc(db, basePath), { rules: editRules });
+    setRules(editRules);
+    setEditRules(null);
   };
 
   return (
@@ -138,13 +201,15 @@ export default function App({ tournament, onBack }) {
       <style>{css}</style>
 
       {/* Header */}
-      <div style={{ padding: "28px 20px 12px", display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ padding: "28px 16px 12px", display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={onBack} style={{
           background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 10,
           padding: "8px 13px", color: "#e8f5e2", fontFamily: "inherit", fontSize: 18, cursor: "pointer",
         }}>‹</button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tournament.name}</h1>
+          <h1 style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {tournament.name}
+          </h1>
           <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
             {members.length} jogadores · {matches.length} partidas
             {isAdmin && <span style={{ color: "#ffd700", marginLeft: 6 }}>· Admin</span>}
@@ -153,24 +218,28 @@ export default function App({ tournament, onBack }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.08)", margin: "0 16px" }}>
-        {TABS.map((t, i) => (
-          <button key={i} className={`tab-btn ${tab === i ? "active" : ""}`} onClick={() => setTab(i)}>{t}</button>
-        ))}
+      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.08)", margin: "0 12px" }}>
+        {TABS.map((t, i) => {
+          if (!isAdmin && i === 4) return null;
+          return (
+            <button key={i} className={`tab-btn ${tab === i ? "active" : ""}`} onClick={() => setTab(i)}>
+              {t}
+            </button>
+          );
+        })}
       </div>
 
-      <div style={{ padding: "20px 16px", maxWidth: 480, margin: "0 auto" }}>
+      <div style={{ padding: "18px 16px", maxWidth: 480, margin: "0 auto" }}>
 
-        {/* ── TAB 0: Ranking ── */}
+        {/* ══════════════ TAB 0: RANKING ══════════════ */}
         {tab === 0 && (
           <div>
-            {/* Legenda das regras */}
             <div style={{
               background: "rgba(255,215,0,0.07)", border: "1px solid rgba(255,215,0,0.15)",
-              borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 12,
-              color: "rgba(255,255,255,0.6)", lineHeight: 1.6,
+              borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12,
+              color: "rgba(255,255,255,0.6)", lineHeight: 1.7,
             }}>
-              🏆 <strong style={{ color: "#ffd700" }}>Para pontuar:</strong> inscrito + taxa paga + mín. 3 vitórias + mín. 5 jogos
+              🏆 <strong style={{ color: "#ffd700" }}>Para classificar:</strong> taxa semanal paga + mín. {rules.minWins} vitórias + mín. {rules.minGames} jogos
             </div>
 
             {ranking.length === 0 && (
@@ -180,39 +249,44 @@ export default function App({ tournament, onBack }) {
             )}
 
             {ranking.map((r, i) => {
-              const medal = r.qualified
+              const pos = r.qualified
                 ? (i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}º`)
                 : "—";
+              const missing = [];
+              if (!r.taxaOk && r.weeksPlayed.length > 0) missing.push(`taxa pendente (${r.unpaidWeeks.length} sem.)`);
+              if (r.wins < rules.minWins) missing.push(`faltam ${rules.minWins - r.wins}V`);
+              if (r.played < rules.minGames) missing.push(`faltam ${rules.minGames - r.played} jogos`);
+
               return (
                 <div key={r.id} style={{
                   display: "flex", alignItems: "center", gap: 12,
                   background: r.qualified && i === 0 ? "rgba(255,215,0,0.07)" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${r.qualified ? (i === 0 ? "rgba(255,215,0,0.2)" : "rgba(46,204,113,0.15)") : "rgba(255,255,255,0.06)"}`,
+                  border: `1px solid ${r.qualified
+                    ? i === 0 ? "rgba(255,215,0,0.25)" : "rgba(46,204,113,0.15)"
+                    : "rgba(255,255,255,0.06)"}`,
                   borderRadius: 12, padding: "12px 14px", marginBottom: 10,
-                  opacity: r.qualified ? 1 : 0.65,
+                  opacity: r.qualified ? 1 : 0.7,
                 }}>
-                  <span style={{ fontSize: 18, width: 28, textAlign: "center" }}>{medal}</span>
-                  <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 18, width: 28, textAlign: "center", flexShrink: 0 }}>{pos}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{r.name}</div>
                     <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>
                       {r.wins}V · {r.played} jogos
-                      {!r.paid && <span style={{ color: "#e74c3c", marginLeft: 6 }}>· taxa pendente</span>}
-                      {r.paid && r.wins < 3 && <span style={{ color: "rgba(255,255,255,0.3)", marginLeft: 6 }}>· precisa de {3 - r.wins}V</span>}
-                      {r.paid && r.wins >= 3 && r.played < 5 && <span style={{ color: "rgba(255,255,255,0.3)", marginLeft: 6 }}>· precisa de {5 - r.played} jogos</span>}
+                      {missing.length > 0 && (
+                        <span style={{ color: "#e74c3c", marginLeft: 4 }}>· {missing[0]}</span>
+                      )}
                     </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    {r.qualified
-                      ? <span className="badge-green">Classificado</span>
-                      : <span className="badge-red">Não classif.</span>}
-                  </div>
+                  <span className={r.qualified ? "badge-green" : "badge-red"}>
+                    {r.qualified ? "Classif." : "Não classif."}
+                  </span>
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* ── TAB 1: Partidas ── */}
+        {/* ══════════════ TAB 1: PARTIDAS ══════════════ */}
         {tab === 1 && (
           <div>
             {Object.keys(matchesByDate).length === 0 && (
@@ -220,50 +294,66 @@ export default function App({ tournament, onBack }) {
                 Nenhuma partida registrada ainda.
               </p>
             )}
+
             {Object.entries(matchesByDate)
               .sort(([a], [b]) => b.localeCompare(a))
               .map(([date, dayMatches]) => (
                 <div key={date} style={{ marginBottom: 24 }}>
-                  <div style={{
-                    fontSize: 12, fontWeight: 700, color: "#2ecc71", letterSpacing: 0.5,
-                    marginBottom: 10, paddingBottom: 6,
-                    borderBottom: "1px solid rgba(46,204,113,0.2)",
-                  }}>
-                    📅 {date === "sem data" ? "Sem data" : formatDate(date)}
-                    <span style={{ color: "rgba(255,255,255,0.3)", fontWeight: 400, marginLeft: 8 }}>
-                      {dayMatches.length} {dayMatches.length === 1 ? "partida" : "partidas"}
-                    </span>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#2ecc71", letterSpacing: 0.5, marginBottom: 2 }}>
+                    📅 {date === "sem-data" ? "Sem data" : formatDate(date)}
                   </div>
-                  {dayMatches.map((m) => (
-                    <div key={m.id} style={{
-                      display: "flex", alignItems: "center",
-                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
-                      borderRadius: 12, padding: "13px 16px", marginBottom: 8,
-                    }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{m.player1}</div>
-                        <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, margin: "2px 0" }}>vs</div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{m.player2}</div>
+                  <div style={{
+                    fontSize: 11, color: "rgba(255,255,255,0.3)", marginBottom: 10,
+                    paddingBottom: 8, borderBottom: "1px solid rgba(46,204,113,0.15)",
+                  }}>
+                    Semana: {date === "sem-data" ? "—" : getWeekRange(getWeekKey(date))}
+                  </div>
+
+                  {dayMatches.map((m) => {
+                    const d1w = m.score1 > m.score2;
+                    const d2w = m.score2 > m.score1;
+                    const d1name = m.p1b ? `${m.p1a} & ${m.p1b}` : m.p1a;
+                    const d2name = m.p2b ? `${m.p2a} & ${m.p2b}` : m.p2a;
+                    return (
+                      <div key={m.id} style={{
+                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+                        borderRadius: 12, padding: "13px 14px", marginBottom: 8,
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: d1w ? "#2ecc71" : "inherit" }}>
+                              {d1name}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "center", minWidth: 72, flexShrink: 0 }}>
+                            <span style={{ fontSize: 22, fontWeight: 800, color: d1w ? "#2ecc71" : d2w ? "#e74c3c" : "#fff" }}>
+                              {m.score1}
+                            </span>
+                            <span style={{ color: "rgba(255,255,255,0.2)", margin: "0 5px" }}>×</span>
+                            <span style={{ fontSize: 22, fontWeight: 800, color: d2w ? "#2ecc71" : d1w ? "#e74c3c" : "#fff" }}>
+                              {m.score2}
+                            </span>
+                          </div>
+                          <div style={{ flex: 1, textAlign: "right" }}>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: d2w ? "#2ecc71" : "inherit" }}>
+                              {d2name}
+                            </div>
+                          </div>
+                        </div>
+                        {(d1w || d2w) && (
+                          <div style={{ textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 6 }}>
+                            🏆 {d1w ? d1name : d2name} vencem
+                          </div>
+                        )}
                       </div>
-                      <div style={{ textAlign: "center", minWidth: 48 }}>
-                        <div style={{
-                          fontSize: 22, fontWeight: 800, lineHeight: 1.1,
-                          color: m.score1 > m.score2 ? "#2ecc71" : m.score1 < m.score2 ? "#e74c3c" : "#fff",
-                        }}>{m.score1}</div>
-                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", margin: "1px 0" }}>SET</div>
-                        <div style={{
-                          fontSize: 22, fontWeight: 800, lineHeight: 1.1,
-                          color: m.score2 > m.score1 ? "#2ecc71" : m.score2 < m.score1 ? "#e74c3c" : "#fff",
-                        }}>{m.score2}</div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ))}
           </div>
         )}
 
-        {/* ── TAB 2: Financeiro ── */}
+        {/* ══════════════ TAB 2: FINANCEIRO ══════════════ */}
         {tab === 2 && (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
@@ -279,7 +369,7 @@ export default function App({ tournament, onBack }) {
 
             {!isAdmin && (
               <div style={{
-                background: "rgba(255,215,0,0.08)", border: "1px solid rgba(255,215,0,0.15)",
+                background: "rgba(255,215,0,0.07)", border: "1px solid rgba(255,215,0,0.15)",
                 borderRadius: 10, padding: "10px 14px", fontSize: 12,
                 color: "rgba(255,255,255,0.5)", marginBottom: 16,
               }}>
@@ -289,100 +379,262 @@ export default function App({ tournament, onBack }) {
 
             <h2 style={{ fontSize: 15, fontWeight: 700, color: "#2ecc71", marginBottom: 14 }}>Jogadores</h2>
 
-            {members.length === 0 && (
-              <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 14 }}>Nenhum jogador inscrito ainda.</p>
-            )}
-
-            {members.map((m) => (
-              <div key={m.id} style={{
-                display: "flex", alignItems: "center", gap: 12,
-                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
-                borderRadius: 12, padding: "13px 16px", marginBottom: 10,
-              }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: "50%",
-                  background: m.paid ? "rgba(46,204,113,0.18)" : "rgba(231,76,60,0.18)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 800, fontSize: 15, color: m.paid ? "#2ecc71" : "#e74c3c",
-                  flexShrink: 0,
-                }}>{m.name?.[0]?.toUpperCase()}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
-                    {m.name}
-                    {m.role === "admin" && <span style={{ fontSize: 10, color: "#ffd700", fontWeight: 700 }}>ADMIN</span>}
+            {members.map((m) => {
+              const stats = statsFor(m);
+              return (
+                <div key={m.id} style={{
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 14, padding: "14px 16px", marginBottom: 12,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: stats.weeksPlayed.length > 0 ? 12 : 0 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                      background: stats.unpaidWeeks.length === 0 && stats.weeksPlayed.length > 0
+                        ? "rgba(46,204,113,0.18)" : "rgba(231,76,60,0.18)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontWeight: 800, fontSize: 14,
+                      color: stats.unpaidWeeks.length === 0 && stats.weeksPlayed.length > 0 ? "#2ecc71" : "#e74c3c",
+                    }}>{m.name?.[0]?.toUpperCase()}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, display: "flex", gap: 6, alignItems: "center" }}>
+                        {m.name}
+                        {m.role === "admin" && (
+                          <span style={{ fontSize: 10, color: "#ffd700", fontWeight: 700 }}>ADMIN</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+                        {stats.weeksPlayed.length} {stats.weeksPlayed.length === 1 ? "semana" : "semanas"} · R$ {rules.weeklyFee}/sem
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>R$ {m.amount || 10} / fim de semana</div>
+
+                  {stats.weeksPlayed.length === 0 && (
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", fontStyle: "italic" }}>
+                      Sem partidas registradas ainda
+                    </div>
+                  )}
+
+                  {stats.weeksPlayed.map((wk) => {
+                    const paid = (m.paidWeeks || []).includes(wk);
+                    const refMatch = matches.find((mm) => getWeekKey(mm.date || todayStr()) === wk);
+                    const displayRange = refMatch ? getWeekRange(getWeekKey(refMatch.date)) : wk;
+                    return (
+                      <div key={wk} style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        background: "rgba(255,255,255,0.04)", borderRadius: 10,
+                        padding: "8px 12px", marginBottom: 6,
+                      }}>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>{displayRange}</div>
+                        <button
+                          onClick={() => handleToggleWeekPaid(m, wk)}
+                          disabled={!isAdmin}
+                          style={{ background: "none", border: "none", cursor: isAdmin ? "pointer" : "default" }}
+                        >
+                          <span className={paid ? "badge-green" : "badge-red"}>
+                            {paid ? `✓ R$ ${rules.weeklyFee}` : `⏳ R$ ${rules.weeklyFee}`}
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <button
-                  onClick={() => handleTogglePaid(m)}
-                  disabled={!isAdmin}
-                  style={{ background: "none", border: "none", cursor: isAdmin ? "pointer" : "default" }}
-                >
-                  <span className={m.paid ? "badge-green" : "badge-red"}>
-                    {m.paid ? "✓ Pago" : "⏳ Pendente"}
-                  </span>
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        {/* ── TAB 3: Nova Partida ── */}
+        {/* ══════════════ TAB 3: NOVA PARTIDA ══════════════ */}
         {tab === 3 && (
           <div>
             <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, color: "#2ecc71" }}>Registrar Partida</h2>
             <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
               <div>
-                {label("DATA DA PARTIDA")}
-                <input className="input-field" type="date" value={newMatch.date}
-                  onChange={(e) => setNewMatch((m) => ({ ...m, date: e.target.value }))} />
+                <Lbl>DATA DA PARTIDA</Lbl>
+                <input className="input-field" type="date" value={nm.date} onChange={setF("date")} />
+                {nm.date && (
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 5 }}>
+                    📅 Semana: {getWeekRange(getWeekKey(nm.date))}
+                  </div>
+                )}
               </div>
 
-              {[
-                { lbl: "JOGADOR 1", key: "player1", exclude: newMatch.player2 },
-                { lbl: "JOGADOR 2", key: "player2", exclude: newMatch.player1 },
-              ].map(({ lbl, key, exclude }) => (
-                <div key={key}>
-                  {label(lbl)}
-                  <select className="input-field" value={newMatch[key]}
-                    onChange={(e) => setNewMatch((m) => ({ ...m, [key]: e.target.value }))}>
-                    <option value="">Selecionar jogador...</option>
-                    {memberNames.filter((n) => n !== exclude).map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {[{ lbl: "SETS J1", key: "score1" }, { lbl: "SETS J2", key: "score2" }].map(({ lbl, key }) => (
-                  <div key={key}>
-                    {label(lbl)}
-                    <input className="input-field" type="number" inputMode="numeric" min="0" max="99"
-                      placeholder="0" value={newMatch[key]}
-                      onChange={(e) => setNewMatch((m) => ({ ...m, [key]: e.target.value }))} />
+              {/* Dupla 1 */}
+              <div style={{
+                background: "rgba(46,204,113,0.06)", border: "1px solid rgba(46,204,113,0.15)",
+                borderRadius: 12, padding: 12,
+              }}>
+                <div style={{ fontSize: 12, color: "#2ecc71", fontWeight: 700, marginBottom: 10 }}>🟢 DUPLA 1</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div>
+                    <Lbl>JOGADOR A</Lbl>
+                    <select className="input-field" value={nm.p1a} onChange={setF("p1a")}>
+                      <option value="">Selecionar...</option>
+                      {memberNames.filter((n) => ![nm.p1b, nm.p2a, nm.p2b].includes(n)).map((n) => (
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
                   </div>
-                ))}
+                  <div>
+                    <Lbl>JOGADOR B (opcional)</Lbl>
+                    <select className="input-field" value={nm.p1b} onChange={setF("p1b")}>
+                      <option value="">— sem parceiro —</option>
+                      {memberNames.filter((n) => ![nm.p1a, nm.p2a, nm.p2b].includes(n)).map((n) => (
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Placar central */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "end" }}>
+                <div>
+                  <Lbl>SETS D1</Lbl>
+                  <input className="input-field" type="number" inputMode="numeric" min="0" placeholder="0"
+                    value={nm.score1} onChange={setF("score1")}
+                    style={{ textAlign: "center", fontSize: 20, fontWeight: 800 }} />
+                </div>
+                <div style={{ paddingBottom: 12, color: "rgba(255,255,255,0.2)", fontSize: 18, textAlign: "center" }}>×</div>
+                <div>
+                  <Lbl>SETS D2</Lbl>
+                  <input className="input-field" type="number" inputMode="numeric" min="0" placeholder="0"
+                    value={nm.score2} onChange={setF("score2")}
+                    style={{ textAlign: "center", fontSize: 20, fontWeight: 800 }} />
+                </div>
+              </div>
+
+              {/* Dupla 2 */}
+              <div style={{
+                background: "rgba(231,76,60,0.06)", border: "1px solid rgba(231,76,60,0.15)",
+                borderRadius: 12, padding: 12,
+              }}>
+                <div style={{ fontSize: 12, color: "#e74c3c", fontWeight: 700, marginBottom: 10 }}>🔴 DUPLA 2</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div>
+                    <Lbl>JOGADOR A</Lbl>
+                    <select className="input-field" value={nm.p2a} onChange={setF("p2a")}>
+                      <option value="">Selecionar...</option>
+                      {memberNames.filter((n) => ![nm.p1a, nm.p1b, nm.p2b].includes(n)).map((n) => (
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Lbl>JOGADOR B (opcional)</Lbl>
+                    <select className="input-field" value={nm.p2b} onChange={setF("p2b")}>
+                      <option value="">— sem parceiro —</option>
+                      {memberNames.filter((n) => ![nm.p1a, nm.p1b, nm.p2a].includes(n)).map((n) => (
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* Preview resultado */}
-              {newMatch.player1 && newMatch.player2 && newMatch.score1 !== "" && newMatch.score2 !== "" && (
+              {nm.p1a && nm.p2a && nm.score1 !== "" && nm.score2 !== "" && (
                 <div style={{
                   background: "rgba(46,204,113,0.08)", border: "1px solid rgba(46,204,113,0.2)",
                   borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#2ecc71", textAlign: "center",
                 }}>
-                  {Number(newMatch.score1) > Number(newMatch.score2)
-                    ? `🏆 ${newMatch.player1} vence!`
-                    : Number(newMatch.score2) > Number(newMatch.score1)
-                    ? `🏆 ${newMatch.player2} vence!`
+                  {Number(nm.score1) > Number(nm.score2)
+                    ? `🏆 ${nm.p1a}${nm.p1b ? " & " + nm.p1b : ""} vencem!`
+                    : Number(nm.score2) > Number(nm.score1)
+                    ? `🏆 ${nm.p2a}${nm.p2b ? " & " + nm.p2b : ""} vencem!`
                     : "🤝 Empate!"}
                 </div>
               )}
 
-              <button className="btn-green" onClick={handleAddMatch} disabled={saving}>
+              <button className="btn-green" onClick={handleAddMatch}
+                disabled={saving || !nm.p1a || !nm.p2a || nm.score1 === "" || nm.score2 === ""}>
                 {saving ? "Salvando..." : "Salvar Partida 🎾"}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════ TAB 4: CONFIG (só admin) ══════════════ */}
+        {tab === 4 && isAdmin && (
+          <div>
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: "#2ecc71" }}>Configurações</h2>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 18 }}>
+              Visível e editável apenas por admins.
+            </p>
+
+            {/* Regras */}
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>🏆 Regras de Classificação</div>
+              {editRules ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {[
+                    { lbl: "MÍNIMO DE VITÓRIAS", key: "minWins" },
+                    { lbl: "MÍNIMO DE JOGOS", key: "minGames" },
+                    { lbl: "TAXA SEMANAL (R$)", key: "weeklyFee" },
+                  ].map(({ lbl, key }) => (
+                    <div key={key}>
+                      <Lbl>{lbl}</Lbl>
+                      <input className="input-field" type="number" inputMode="numeric" min="0"
+                        value={editRules[key]}
+                        onChange={(e) => setEditRules((r) => ({ ...r, [key]: Number(e.target.value) }))} />
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button className="btn-green" onClick={handleSaveRules}>Salvar</button>
+                    <button onClick={() => setEditRules(null)} style={{
+                      flex: 1, background: "rgba(255,255,255,0.07)", border: "none", padding: "13px",
+                      borderRadius: 12, color: "rgba(255,255,255,0.5)", fontFamily: "inherit",
+                      fontSize: 14, cursor: "pointer",
+                    }}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {[
+                    ["Mínimo de vitórias", `${rules.minWins}V`],
+                    ["Mínimo de jogos", `${rules.minGames} jogos`],
+                    ["Taxa semanal", `R$ ${rules.weeklyFee}`],
+                  ].map(([lbl, val]) => (
+                    <div key={lbl} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: 14,
+                    }}>
+                      <span style={{ color: "rgba(255,255,255,0.55)" }}>{lbl}</span>
+                      <span style={{ fontWeight: 700, color: "#2ecc71" }}>{val}</span>
+                    </div>
+                  ))}
+                  <button onClick={() => setEditRules({ ...rules })} style={{
+                    width: "100%", background: "rgba(255,255,255,0.07)", border: "none", padding: "11px",
+                    borderRadius: 10, color: "#e8f5e2", fontFamily: "inherit", fontSize: 13,
+                    cursor: "pointer", marginTop: 14,
+                  }}>✏️ Editar Regras</button>
+                </div>
+              )}
+            </div>
+
+            {/* Gerenciar admins */}
+            <div className="card">
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>👑 Admins do Torneio</div>
+              <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
+                Admins podem marcar pagamentos e editar configurações.
+              </p>
+              {members.map((m) => (
+                <div key={m.id} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.06)",
+                }}>
+                  <div style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{m.name}</div>
+                  <button onClick={() => handleToggleAdmin(m)} style={{
+                    background: m.role === "admin" ? "rgba(255,215,0,0.15)" : "rgba(255,255,255,0.07)",
+                    border: `1px solid ${m.role === "admin" ? "rgba(255,215,0,0.3)" : "rgba(255,255,255,0.1)"}`,
+                    borderRadius: 8, padding: "6px 14px",
+                    color: m.role === "admin" ? "#ffd700" : "rgba(255,255,255,0.5)",
+                    fontFamily: "inherit", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}>
+                    {m.role === "admin" ? "👑 Admin" : "Tornar Admin"}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}

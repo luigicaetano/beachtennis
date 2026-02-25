@@ -44,13 +44,13 @@ export default function TournamentScreen({ onSelect }) {
       createdBy: user.uid,
       createdByName: user.displayName || user.email,
       createdAt: serverTimestamp(),
+      rules: { minWins: 3, minGames: 5, weeklyFee: 10 },
     });
     await setDoc(doc(db, "tournaments", docRef.id, "members", user.uid), {
       uid: user.uid,
       name: user.displayName || user.email,
       role: "admin",
-      paid: false,
-      amount: 10,
+      paidWeeks: [],
       joinedAt: serverTimestamp(),
     });
     await setDoc(doc(db, "users", user.uid, "enrollments", docRef.id), { name: newName.trim() });
@@ -62,20 +62,21 @@ export default function TournamentScreen({ onSelect }) {
 
   const handleJoin = async (t) => {
     setJoiningId(t.id);
-    const memberDoc = await getDoc(doc(db, "tournaments", t.id, "members", user.uid));
+    const isAdmin = t.createdBy === user.uid;
+    const memberRef = doc(db, "tournaments", t.id, "members", user.uid);
+    const memberDoc = await getDoc(memberRef);
     if (!memberDoc.exists()) {
-      await setDoc(doc(db, "tournaments", t.id, "members", user.uid), {
+      await setDoc(memberRef, {
         uid: user.uid,
         name: user.displayName || user.email,
-        role: "player",
-        paid: false,
-        amount: 10,
+        role: isAdmin ? "admin" : "player",
+        paidWeeks: [],
         joinedAt: serverTimestamp(),
       });
     }
     await setDoc(doc(db, "users", user.uid, "enrollments", t.id), { name: t.name });
     setJoiningId(null);
-    onSelect({ ...t, role: t.createdBy === user.uid ? "admin" : "player" });
+    onSelect({ ...t, role: isAdmin ? "admin" : "player" });
   };
 
   const filtered = tab === "mine"
@@ -104,6 +105,7 @@ export default function TournamentScreen({ onSelect }) {
       </div>
 
       <div style={{ padding: "0 24px", maxWidth: 480, margin: "0 auto" }}>
+
         {!showForm ? (
           <button onClick={() => setShowForm(true)} style={{
             width: "100%", background: "#2ecc71", color: "#0a2e1f", border: "none",
@@ -115,23 +117,29 @@ export default function TournamentScreen({ onSelect }) {
             background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 16, padding: 20, marginBottom: 20,
           }}>
-            <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 10, color: "rgba(255,255,255,0.5)", letterSpacing: 0.5 }}>NOME DO TORNEIO</p>
+            <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 10, color: "rgba(255,255,255,0.5)", letterSpacing: 0.5 }}>
+              NOME DO TORNEIO
+            </p>
             <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              placeholder="Ex: Torneio de Verão 2025" style={{ ...inputStyle, marginBottom: 12 }} />
+              placeholder="Ex: Torneio de Verão 2025"
+              style={{ ...inputStyle, marginBottom: 12 }} />
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={handleCreate} disabled={loading} style={{
                 flex: 1, background: "#2ecc71", color: "#0a2e1f", border: "none",
-                padding: "12px", borderRadius: 10, fontFamily: "inherit", fontWeight: 700, fontSize: 14, cursor: "pointer",
+                padding: "12px", borderRadius: 10, fontFamily: "inherit", fontWeight: 700,
+                fontSize: 14, cursor: "pointer",
               }}>{loading ? "Criando..." : "Criar"}</button>
               <button onClick={() => { setShowForm(false); setNewName(""); }} style={{
                 background: "rgba(255,255,255,0.07)", border: "none", padding: "12px 16px",
-                borderRadius: 10, color: "rgba(255,255,255,0.5)", fontFamily: "inherit", fontSize: 14, cursor: "pointer",
+                borderRadius: 10, color: "rgba(255,255,255,0.5)", fontFamily: "inherit",
+                fontSize: 14, cursor: "pointer",
               }}>Cancelar</button>
             </div>
           </div>
         )}
 
+        {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: 16 }}>
           {[["all", "Todos os Torneios"], ["mine", "Meus Torneios"]].map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)} style={{
@@ -165,25 +173,26 @@ export default function TournamentScreen({ onSelect }) {
                   </div>
                 </div>
                 {isAdmin && (
-                  <span style={{ background: "rgba(255,215,0,0.15)", color: "#ffd700", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>ADMIN</span>
+                  <span style={{ background: "rgba(255,215,0,0.15)", color: "#ffd700", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+                    ADMIN
+                  </span>
                 )}
                 {!isAdmin && enrolled && (
-                  <span style={{ background: "rgba(46,204,113,0.15)", color: "#2ecc71", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>INSCRITO</span>
+                  <span style={{ background: "rgba(46,204,113,0.15)", color: "#2ecc71", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+                    INSCRITO
+                  </span>
                 )}
               </div>
-              {enrolled ? (
-                <button onClick={() => handleJoin(t)} style={{
-                  width: "100%", background: "rgba(46,204,113,0.12)", color: "#2ecc71",
-                  border: "1px solid rgba(46,204,113,0.3)", padding: "10px", borderRadius: 10,
-                  fontFamily: "inherit", fontWeight: 700, fontSize: 14, cursor: "pointer",
-                }}>Abrir Torneio →</button>
-              ) : (
-                <button onClick={() => handleJoin(t)} disabled={joiningId === t.id} style={{
-                  width: "100%", background: "#2ecc71", color: "#0a2e1f", border: "none",
-                  padding: "10px", borderRadius: 10, fontFamily: "inherit", fontWeight: 700,
-                  fontSize: 14, cursor: "pointer", opacity: joiningId === t.id ? 0.6 : 1,
-                }}>{joiningId === t.id ? "Entrando..." : "🎾 Entrar no Torneio"}</button>
-              )}
+              <button onClick={() => handleJoin(t)} disabled={joiningId === t.id} style={{
+                width: "100%",
+                background: enrolled ? "rgba(46,204,113,0.12)" : "#2ecc71",
+                color: enrolled ? "#2ecc71" : "#0a2e1f",
+                border: enrolled ? "1px solid rgba(46,204,113,0.3)" : "none",
+                padding: "10px", borderRadius: 10, fontFamily: "inherit", fontWeight: 700,
+                fontSize: 14, cursor: "pointer", opacity: joiningId === t.id ? 0.6 : 1,
+              }}>
+                {joiningId === t.id ? "Entrando..." : enrolled ? "Abrir Torneio →" : "🎾 Entrar no Torneio"}
+              </button>
             </div>
           );
         })}
