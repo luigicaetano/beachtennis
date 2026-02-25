@@ -1,0 +1,42 @@
+// firestore.rules
+// Cole essas regras no Firebase Console → Firestore → Regras
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Torneios: qualquer usuário logado pode ler e criar
+    match /tournaments/{tournamentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null
+        && resource.data.createdBy == request.auth.uid;
+
+      // Membros: qualquer logado pode ler e se adicionar
+      match /members/{memberId} {
+        allow read: if request.auth != null;
+        // Pode criar/atualizar seu próprio membro
+        allow create: if request.auth != null && memberId == request.auth.uid;
+        // Só admin (criador do torneio) pode atualizar outros (ex: marcar pago)
+        allow update: if request.auth != null && (
+          memberId == request.auth.uid ||
+          get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.createdBy == request.auth.uid
+        );
+      }
+
+      // Partidas: qualquer membro inscrito pode registrar
+      match /matches/{matchId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+          && exists(/databases/$(database)/documents/tournaments/$(tournamentId)/members/$(request.auth.uid));
+        allow update, delete: if request.auth != null
+          && get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.createdBy == request.auth.uid;
+      }
+    }
+
+    // Enrollments pessoais de cada usuário
+    match /users/{userId}/enrollments/{enrollmentId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

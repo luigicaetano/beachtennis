@@ -1,0 +1,24 @@
+{
+  "short_name": "Beach Tennis",
+  "name": "Beach Tennis Pro",
+  "description": "Gestão de torneios de beach tennis",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0a2e1f",
+  "background_color": "#0a2e1f",
+  "orientation": "portrait"
+}
