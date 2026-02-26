@@ -317,34 +317,30 @@ export default function App({ tournament, onBack }) {
                     return (
                       <div key={m.id} style={{
                         background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
-                        borderRadius: 12, padding: "13px 14px", marginBottom: 8,
+                        borderRadius: 12, padding: "12px 14px", marginBottom: 8,
                       }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, fontSize: 13, color: d1w ? "#2ecc71" : "inherit" }}>
-                              {d1name}
-                            </div>
+                        {/* Dupla 1 */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: d1w ? "#2ecc71" : "rgba(255,255,255,0.85)", flex: 1 }}>
+                            {d1w && <span style={{ marginRight: 5 }}>🏆</span>}{d1name}
                           </div>
-                          <div style={{ textAlign: "center", minWidth: 72, flexShrink: 0 }}>
-                            <span style={{ fontSize: 22, fontWeight: 800, color: d1w ? "#2ecc71" : d2w ? "#e74c3c" : "#fff" }}>
-                              {m.score1}
-                            </span>
-                            <span style={{ color: "rgba(255,255,255,0.2)", margin: "0 5px" }}>×</span>
-                            <span style={{ fontSize: 22, fontWeight: 800, color: d2w ? "#2ecc71" : d1w ? "#e74c3c" : "#fff" }}>
-                              {m.score2}
-                            </span>
-                          </div>
-                          <div style={{ flex: 1, textAlign: "right" }}>
-                            <div style={{ fontWeight: 700, fontSize: 13, color: d2w ? "#2ecc71" : "inherit" }}>
-                              {d2name}
-                            </div>
-                          </div>
+                          <div style={{
+                            fontSize: 22, fontWeight: 800, minWidth: 36, textAlign: "right",
+                            color: d1w ? "#2ecc71" : d2w ? "#e74c3c" : "#fff",
+                          }}>{m.score1}</div>
                         </div>
-                        {(d1w || d2w) && (
-                          <div style={{ textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 6 }}>
-                            🏆 {d1w ? d1name : d2name} vencem
+                        {/* Divisor */}
+                        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", margin: "4px 0" }} />
+                        {/* Dupla 2 */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: d2w ? "#2ecc71" : "rgba(255,255,255,0.85)", flex: 1 }}>
+                            {d2w && <span style={{ marginRight: 5 }}>🏆</span>}{d2name}
                           </div>
-                        )}
+                          <div style={{
+                            fontSize: 22, fontWeight: 800, minWidth: 36, textAlign: "right",
+                            color: d2w ? "#2ecc71" : d1w ? "#e74c3c" : "#fff",
+                          }}>{m.score2}</div>
+                        </div>
                       </div>
                     );
                   })}
