@@ -115,8 +115,8 @@ export default function TournamentScreen({ onSelect }) {
 
       <div style={{ padding: "40px 24px 20px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
-          <div style={{ fontSize: 28 }}>🎾</div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: "#0a2e1f" }}>Beach Tennis Pro</h1>
+          <img src="/raquete.png" alt="Raquete" style={{ width: 36, height: 36, objectFit: "contain" }} />
+          <h1 style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: "#0a2e1f" }}>Torneios Beach Tennis</h1>
           {editingUserName ? (
             <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
               <input
@@ -270,7 +270,7 @@ export default function TournamentScreen({ onSelect }) {
                 padding: "10px", borderRadius: 10, fontFamily: "inherit", fontWeight: 700,
                 fontSize: 14, cursor: "pointer", opacity: joiningId === t.id ? 0.6 : 1,
               }}>
-                {joiningId === t.id ? "Entrando..." : enrolled ? "Abrir Torneio →" : "🎾 Entrar no Torneio"}
+                {joiningId === t.id ? "Entrando..." : enrolled ? "Abrir Torneio →" : "🏸 Entrar no Torneio"}
               </button>
             </div>
           );

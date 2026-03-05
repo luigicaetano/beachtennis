@@ -66,8 +66,8 @@ export default function LoginScreen() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&display=swap');`}</style>
 
       <div style={{ textAlign: "center", marginBottom: 36 }}>
-        <div style={{ fontSize: 56, marginBottom: 8 }}>🎾</div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.5, color: "#0a2e1f" }}>Beach Tennis Pro</h1>
+        <img src="/raquete.png" alt="Raquete" style={{ width: 64, height: 64, marginBottom: 8, objectFit: "contain" }} />
+        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.5, color: "#0a2e1f" }}>Torneios Beach Tennis</h1>
         <p style={{ color: "#5a7a65", fontSize: 13, marginTop: 4 }}>Gestão de Torneios</p>
       </div>
 
