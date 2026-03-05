@@ -36,8 +36,10 @@ export function AuthProvider({ children }) {
 
   const resetPassword = (email) => sendPasswordResetEmail(auth, email);
 
+  const updateName = (name) => updateProfile(auth.currentUser, { displayName: name });
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, resetPassword, loading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, resetPassword, updateName, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

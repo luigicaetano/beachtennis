@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  serverTimestamp, doc, setDoc, getDoc,
+  serverTimestamp, doc, setDoc, getDoc, updateDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -14,7 +14,7 @@ const inputStyle = {
 };
 
 export default function TournamentScreen({ onSelect }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateName } = useAuth();
   const [tournaments, setTournaments] = useState([]);
   const [myEnrollments, setMyEnrollments] = useState(new Set());
   const [newName, setNewName] = useState("");
@@ -22,6 +22,14 @@ export default function TournamentScreen({ onSelect }) {
   const [loading, setLoading] = useState(false);
   const [joiningId, setJoiningId] = useState(null);
   const [tab, setTab] = useState("all");
+
+  // Edição de nome do torneio
+  const [editingTournament, setEditingTournament] = useState(null); // { id, name }
+  const [editTournamentName, setEditTournamentName] = useState("");
+
+  // Edição do nome do usuário
+  const [editingUserName, setEditingUserName] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
 
   useEffect(() => {
     const q = query(collection(db, "tournaments"), orderBy("createdAt", "desc"));
@@ -79,6 +87,20 @@ export default function TournamentScreen({ onSelect }) {
     onSelect({ ...t, role: isAdmin ? "admin" : "player" });
   };
 
+  const handleRenameTournament = async () => {
+    if (!editTournamentName.trim()) return;
+    await updateDoc(doc(db, "tournaments", editingTournament.id), { name: editTournamentName.trim() });
+    setEditingTournament(null);
+    setEditTournamentName("");
+  };
+
+  const handleUpdateUserName = async () => {
+    if (!newUserName.trim()) return;
+    await updateName(newUserName.trim());
+    setEditingUserName(false);
+    setNewUserName("");
+  };
+
   const filtered = tab === "mine"
     ? tournaments.filter((t) => myEnrollments.has(t.id))
     : tournaments;
@@ -95,7 +117,34 @@ export default function TournamentScreen({ onSelect }) {
         <div>
           <div style={{ fontSize: 28 }}>🎾</div>
           <h1 style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: "#0a2e1f" }}>Beach Tennis Pro</h1>
-          <p style={{ color: "#5a7a65", fontSize: 13 }}>{user.displayName || user.email}</p>
+          {editingUserName ? (
+            <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
+              <input
+                autoFocus
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleUpdateUserName(); if (e.key === "Escape") setEditingUserName(false); }}
+                placeholder={user.displayName || user.email}
+                style={{ ...inputStyle, padding: "6px 10px", fontSize: 13, width: 160 }}
+              />
+              <button onClick={handleUpdateUserName} style={{
+                background: "#1a9e4a", color: "#fff", border: "none",
+                borderRadius: 8, padding: "6px 10px", fontFamily: "inherit",
+                fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>✓</button>
+              <button onClick={() => setEditingUserName(false)} style={{
+                background: "#f5f8f5", border: "1px solid #c8dcc8", borderRadius: 8,
+                padding: "6px 10px", fontFamily: "inherit", fontSize: 12, cursor: "pointer", color: "#5a7a65",
+              }}>✕</button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+              <p style={{ color: "#5a7a65", fontSize: 13 }}>{user.displayName || user.email}</p>
+              <button onClick={() => { setEditingUserName(true); setNewUserName(user.displayName || ""); }} style={{
+                background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#a0b8a5",
+              }} title="Editar nome">✏️</button>
+            </div>
+          )}
         </div>
         <button onClick={logout} style={{
           background: "#fff", border: "1px solid #c8dcc8",
@@ -168,19 +217,47 @@ export default function TournamentScreen({ onSelect }) {
               boxShadow: "0 1px 6px rgba(10,46,31,0.06)",
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 16, color: "#0a2e1f" }}>{t.name}</div>
+                <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+                  {editingTournament?.id === t.id ? (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input
+                        autoFocus
+                        value={editTournamentName}
+                        onChange={(e) => setEditTournamentName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleRenameTournament(); if (e.key === "Escape") setEditingTournament(null); }}
+                        style={{ ...inputStyle, padding: "6px 10px", fontSize: 14, flex: 1 }}
+                      />
+                      <button onClick={handleRenameTournament} style={{
+                        background: "#1a9e4a", color: "#fff", border: "none",
+                        borderRadius: 8, padding: "7px 10px", fontFamily: "inherit",
+                        fontSize: 13, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+                      }}>✓</button>
+                      <button onClick={() => setEditingTournament(null)} style={{
+                        background: "#f5f8f5", border: "1px solid #c8dcc8", borderRadius: 8,
+                        padding: "7px 10px", fontFamily: "inherit", fontSize: 13, cursor: "pointer", color: "#5a7a65", flexShrink: 0,
+                      }}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ fontWeight: 700, fontSize: 16, color: "#0a2e1f" }}>{t.name}</div>
+                      {isAdmin && (
+                        <button onClick={() => { setEditingTournament(t); setEditTournamentName(t.name); }} style={{
+                          background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#a0b8a5",
+                        }} title="Renomear torneio">✏️</button>
+                      )}
+                    </div>
+                  )}
                   <div style={{ color: "#7a9a80", fontSize: 12, marginTop: 3 }}>
                     por {t.createdByName} · {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString("pt-BR") : ""}
                   </div>
                 </div>
                 {isAdmin && (
-                  <span style={{ background: "#fff8e1", color: "#b8860b", border: "1px solid #f0d060", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+                  <span style={{ background: "#fff8e1", color: "#b8860b", border: "1px solid #f0d060", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
                     ADMIN
                   </span>
                 )}
                 {!isAdmin && enrolled && (
-                  <span style={{ background: "#f0faf4", color: "#1a7a40", border: "1px solid #a8dbb8", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+                  <span style={{ background: "#f0faf4", color: "#1a7a40", border: "1px solid #a8dbb8", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
                     INSCRITO
                   </span>
                 )}

@@ -10,6 +10,7 @@ export default function LoginScreen() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [showPassword, setShowPassword] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const switchMode = (m) => { setMode(m); setError(""); setSuccess(""); };
 
@@ -94,10 +95,28 @@ export default function LoginScreen() {
           />
 
           {mode !== "forgot" && (
-            <input
-              style={inputStyle} placeholder="Senha" type="password" value={form.password}
-              onChange={set("password")} onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                style={{ ...inputStyle, paddingRight: 44 }}
+                placeholder="Senha"
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={set("password")}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                style={{
+                  position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: 18, lineHeight: 1, color: "#7a9a80", padding: 4,
+                }}
+                title={showPassword ? "Ocultar senha" : "Ver senha"}
+              >
+                {showPassword ? "🙈" : "👁️"}
+              </button>
+            </div>
           )}
 
           {mode === "login" && (
