@@ -57,28 +57,28 @@ export default function LoginScreen() {
   return (
     <div style={{
       minHeight: "100vh",
-      background: "linear-gradient(160deg, #0a2e1f 0%, #0d3d28 60%, #092918 100%)",
+      background: "#f0f4f0",
       display: "flex", flexDirection: "column", alignItems: "center",
       justifyContent: "center", padding: "24px", fontFamily: "'Sora', sans-serif",
-      color: "#e8f5e2",
+      color: "#0a2e1f",
     }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&display=swap');`}</style>
 
-      <div style={{ textAlign: "center", marginBottom: 40 }}>
+      <div style={{ textAlign: "center", marginBottom: 36 }}>
         <div style={{ fontSize: 56, marginBottom: 8 }}>🎾</div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.5 }}>Beach Tennis Pro</h1>
-        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 4 }}>Gestão de Torneios</p>
+        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.5, color: "#0a2e1f" }}>Beach Tennis Pro</h1>
+        <p style={{ color: "#5a7a65", fontSize: 13, marginTop: 4 }}>Gestão de Torneios</p>
       </div>
 
       <div style={{
-        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+        background: "#fff", border: "1px solid #d4e4d4",
         borderRadius: 20, padding: 28, width: "100%", maxWidth: 380,
-        backdropFilter: "blur(12px)",
+        boxShadow: "0 4px 24px rgba(10,46,31,0.10)",
       }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>{titles[mode]}</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, color: "#0a2e1f" }}>{titles[mode]}</h2>
 
         {mode === "forgot" && (
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)", marginBottom: 16, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 13, color: "#5a7a65", marginBottom: 16, lineHeight: 1.5 }}>
             Informe seu e-mail e enviaremos um link para redefinir sua senha.
           </p>
         )}
@@ -100,11 +100,10 @@ export default function LoginScreen() {
             />
           )}
 
-          {/* Link esqueci senha — só no modo login */}
           {mode === "login" && (
             <p style={{ textAlign: "right", fontSize: 12, marginTop: -6 }}>
               <span onClick={() => switchMode("forgot")}
-                style={{ color: "rgba(255,255,255,0.4)", cursor: "pointer" }}>
+                style={{ color: "#5a7a65", cursor: "pointer" }}>
                 Esqueci minha senha
               </span>
             </p>
@@ -112,21 +111,21 @@ export default function LoginScreen() {
 
           {error && (
             <div style={{
-              background: "rgba(231,76,60,0.15)", border: "1px solid rgba(231,76,60,0.3)",
-              borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#e74c3c",
+              background: "#fdf0f0", border: "1px solid #f5c0c0",
+              borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#c0392b",
             }}>{error}</div>
           )}
 
           {success && (
             <div style={{
-              background: "rgba(46,204,113,0.12)", border: "1px solid rgba(46,204,113,0.3)",
-              borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#2ecc71",
+              background: "#f0faf4", border: "1px solid #a8dbb8",
+              borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#1a7a40",
             }}>{success}</div>
           )}
 
           <button onClick={handleSubmit} disabled={loading} style={{
-            background: loading ? "rgba(46,204,113,0.5)" : "#2ecc71",
-            color: "#0a2e1f", border: "none", padding: "14px",
+            background: loading ? "#8ecfa8" : "#1a9e4a",
+            color: "#fff", border: "none", padding: "14px",
             borderRadius: 12, fontFamily: "inherit", fontWeight: 700,
             fontSize: 15, cursor: loading ? "not-allowed" : "pointer",
             transition: "opacity .15s", marginTop: 4,
@@ -135,17 +134,17 @@ export default function LoginScreen() {
           </button>
         </div>
 
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "#5a7a65" }}>
           {mode === "forgot" ? (
             <span onClick={() => switchMode("login")}
-              style={{ color: "#2ecc71", cursor: "pointer", fontWeight: 600 }}>
+              style={{ color: "#1a9e4a", cursor: "pointer", fontWeight: 600 }}>
               ← Voltar ao login
             </span>
           ) : (
             <>
               {mode === "login" ? "Não tem conta? " : "Já tem conta? "}
               <span onClick={() => switchMode(mode === "login" ? "register" : "login")}
-                style={{ color: "#2ecc71", cursor: "pointer", fontWeight: 600 }}>
+                style={{ color: "#1a9e4a", cursor: "pointer", fontWeight: 600 }}>
                 {mode === "login" ? "Criar conta" : "Entrar"}
               </span>
             </>
@@ -157,7 +156,7 @@ export default function LoginScreen() {
 }
 
 const inputStyle = {
-  background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 10, padding: "12px 14px", color: "#e8f5e2",
+  background: "#f5f8f5", border: "1px solid #c8dcc8",
+  borderRadius: 10, padding: "12px 14px", color: "#0a2e1f",
   fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%",
 };
